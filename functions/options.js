@@ -1,8 +1,9 @@
 const _ = require('lodash')
 const fs = require('fs')
+const path = require('path')
 
 options = {
-    states: JSON.parse(fs.readFileSync('app/reusable-backend/files/states.json')).map(state => state.name)
+    states: JSON.parse(fs.readFileSync(path.join(__dirname,'../files/states.json'))).map(state => state.name)
 }
 
 module.exports = (option) => {
