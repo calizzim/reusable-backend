@@ -34,7 +34,7 @@ module.exports = class {
             }
         }
       }
-
+      console.log(this.templateNames)
       this.database = new Database(this)
     }
 
