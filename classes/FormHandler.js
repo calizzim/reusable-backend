@@ -9,16 +9,22 @@ const Database = require('./Database')
 module.exports = class {
     
     constructor() {
-        this.templateNames = fs
-        .readdirSync(path.join(__dirname,'../templates'))
-        .map(ele => ele.split('.')[0])
-        
-        this.clientTemplates = {}
-        this.serverTemplates = {}
-        this.computedTemplates = {}
-        
-        for(let templateName of this.templateNames) {
-            let template = require(path.join('../templates',templateName))
+      this.templateNames = []
+      let templatePaths = ['../templates', '../../native/templates']
+
+      this.clientTemplates = {}
+      this.serverTemplates = {}
+      this.computedTemplates = {}
+
+      for(let templatePath of templatePaths) {
+        let currentTemplateNames = fs
+          .readdirSync(path.join(__dirname,templatePath))
+          .map(ele => ele.split('.')[0])
+
+        this.templateNames = this.templateNames.concat(currentTemplateNames)
+  
+        for(let templateName of currentTemplateNames) {
+            let template = require(path.join(__dirname,templatePath,templateName))
             if(template.computed) {
                 this.computedTemplates[templateName] = { properties: template.computed, order: template.order }
             }
@@ -27,12 +33,9 @@ module.exports = class {
               this.serverTemplates[templateName] = this.removeGroups(this.convertTemplate(template.template,false))
             }
         }
+      }
 
-        this.http = axios.create({
-            baseURL: "/api/"
-        })
-        
-        this.database = new Database(this)
+      this.database = new Database(this)
     }
 
     checkName(templateName) {

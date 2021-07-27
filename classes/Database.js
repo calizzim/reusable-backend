@@ -80,7 +80,7 @@ module.exports = class {
     const validators = this.templates[templateName][name].asyncValidators
     if (!validators || !value) return null
     for (let validator of validators) {
-      let result = await this.asyncValidatorFunctions[validator](templateName, name, value, token)
+      let result = await this.asyncValidatorFunctions[validator](this, templateName, name, value, token)
       if (result) return result
     }
     return null

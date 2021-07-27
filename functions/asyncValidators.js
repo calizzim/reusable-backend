@@ -1,7 +1,7 @@
 module.exports = {
-  unique: async (formName, name, value, token) => {
+  unique: async (database, formName, name, value, token) => {
     let query = {}; query[name] = value
-    let result = await this.models[formName].findOne(query)
+    let result = await database.models[formName].findOne(query)
     if (result) return { unique: 'has already been taken' }
     return null
   }

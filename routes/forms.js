@@ -6,6 +6,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const config = require("config");
 const authenticator = require("../middleware/authenticator");
+const { template } = require("lodash");
 
 //get a list of forms that the user has completed
 route.get("/completed", authenticator, async(req,res) => {
@@ -35,7 +36,9 @@ route.get("/:templateName", (req, res) => {
 route.get("/formdata/:templateName", authenticator, async (req, res) => {
   const templateName = req.params.templateName;
   if (["user", "login"].includes(templateName))
-    return res.status(400).send({ data: "user data cannot be requested" });
+    return res.status(400).send({ error: "user data cannot be requested" });
+  if(!formHandler.templateNames.includes(templateName))
+    return res.status(400).send({ error: "invalid template name" })
   const formData = await formHandler.database.getFormData(
     templateName,
     req.token
