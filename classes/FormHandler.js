@@ -19,6 +19,7 @@ module.exports = class {
       for(let templatePath of templatePaths) {
         let currentTemplateNames = fs
           .readdirSync(path.join(__dirname,templatePath))
+          .filter(ele => ele.split('.').length > 1 && ele.split('.')[1] == 'js')
           .map(ele => ele.split('.')[0])
 
         this.templateNames = this.templateNames.concat(currentTemplateNames)
