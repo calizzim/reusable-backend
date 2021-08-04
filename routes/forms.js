@@ -6,7 +6,12 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const config = require("config");
 const authenticator = require("../middleware/authenticator");
-const { template } = require("lodash");
+
+const templateName = (req,res,next) => {
+  const result = formHandler.checkName(req.params.templateName)
+  if(!result) return res.status(404).send({ error: 'invalid template name' })
+  next()
+}
 
 //get a list of forms that the user has completed
 route.get("/completed", authenticator, async(req,res) => {
@@ -15,30 +20,36 @@ route.get("/completed", authenticator, async(req,res) => {
 })
 
 //get the computed properties of a form
-route.get("/computed/:templateName", authenticator, async (req,res) => {
-  let computed = await formHandler.getComputed(req.params.templateName, {}, req.token)
+route.get("/computed/:templateName", authenticator, templateName, async (req,res) => {
+  let computed = await formHandler.getComputed(req.params.templateName, req.token)
   if(!computed) return res.status(404).send({ error: 'data not found' })
   return res.status(200).send({ data: computed })
 });
 
-//client requests a specific form object
-route.get("/:templateName", (req, res) => {
+//client requests a specific template object
+route.get("/:templateName", templateName, (req, res) => {
   const templateName = req.params.templateName;
   const template = formHandler.getTemplateClient(templateName);
-  if (!template)
-    return res
-      .status(404)
-      .send({ error: `${templateName} is not an available form` });
-  return res.status(200).send({ data: template });
-});
+  if(!formHandler.hasDependencies(templateName)) res.status(200).send(template)
+  authenticator(req,res,() => {
+    if(formHandler.database.checkDependencies(templateName,req.token)) return res.status(200).send(template)
+    return res.status(400).send({ error: "the template you have requested has dependencies which have not been fulfilled" })
+  })
+})
+
+//client checks if they are allowed to access a template (if dependencies have been fulfilled)
+route.get("/permission/:templateName", authenticator, templateName, (req, res) => {
+  const templateName = req.params.templateName;
+  if(!formHandler.hasDependencies(templateName)) res.status(200).send(true)
+  if(formHandler.database.checkDependencies(templateName,req.token)) return res.status(200).send(true)
+  return res.status(400).send(false)
+})
 
 //client requests a specific form object and form data
-route.get("/formdata/:templateName", authenticator, async (req, res) => {
+route.get("/formdata/:templateName", authenticator, templateName, async (req, res) => {
   const templateName = req.params.templateName;
   if (["user", "login"].includes(templateName))
     return res.status(400).send({ error: "user data cannot be requested" });
-  if(!formHandler.templateNames.includes(templateName))
-    return res.status(400).send({ error: "invalid template name" })
   const formData = await formHandler.database.getFormData(
     templateName,
     req.token
@@ -76,16 +87,16 @@ route.post("/login", async (req, res) => {
 });
 
 //client uploads a completed form to the server
-route.post("/:formName", authenticator, async (req, res) => {
-  const formName = req.params.formName;
-  if (!formHandler.checkName(formName))
+route.post("/:templateName", authenticator, async (req, res) => {
+  const templateName = req.params.templateName;
+  if (!formHandler.checkName(templateName))
     return res
       .status(404)
-      .send({ error: `${formName} is not an available form` });
-  const error = await formHandler.verify(req.body, formName, req.token);
+      .send({ error: `${templateName} is not an available form` });
+  const error = await formHandler.verify(req.body, templateName, req.token);
   if (error) return res.status(400).send({ error: error });
-  formHandler.database.upload(formName, req.body, req.token);
-  let computed = await formHandler.getComputed(formName, req.body, req.token);
+  formHandler.database.upload(templateName, req.body, req.token);
+  let computed = await formHandler.getComputed(templateName, req.token, req.body);
   res.status(200).send({ data: computed });
 });
 
@@ -95,11 +106,12 @@ route.post("/asyncVerify/user", async (req, res) => {
   let result = await formHandler.database.verify('user', name, value, null);
   return res.status(200).send({ data: result });
 });
-route.post("/asyncVerify/:formName", authenticator, async (req, res) => {
-  const formName = req.params.formName;
+
+route.post("/asyncVerify/:templateName", authenticator, templateName, async (req, res) => {
+  const templateName = req.params.templateName;
   const { name, value } = req.body;
   let result = await formHandler.database.verify(
-    formName,
+    templateName,
     name,
     value,
     req.token
