@@ -4,12 +4,12 @@ const db = require('./Database')
 const Form = require('./Form')
 const bcrypt = require('bcrypt')
 
-module.exports = class {
+class FormHandler {
     
     constructor() {
       this.forms = {}
-      
-      ['../templates', '../../native/templates'].forEach(formPath => {
+      let formPaths = ['../templates', '../../native/templates']
+      formPaths.forEach(formPath => {
         formPath = path.join(__dirname, formPath)
         let formNames = fs
           .readdirSync(formPath)
@@ -27,7 +27,7 @@ module.exports = class {
 
     //formnames
     formNames() {
-      return Object.keys(forms)
+      return Object.keys(this.forms)
     }
     hasForm(formName) {
       return this.formNames().includes(formName)
@@ -41,7 +41,7 @@ module.exports = class {
     }
 
     async authenticateLogin(data) {
-      const model = this.forms.user.model();
+      const model = this.forms.user.model;
       let user = await model.findOne({ email: data.email });
       if (!user) return null;
       if (await bcrypt.compare(data.password, user.password)) return user._id;
@@ -50,14 +50,21 @@ module.exports = class {
   
     async getCompleted(token) {
       let data = await Promise.all(
-        this.forms.map(form => {
-          return form.model().findById(token.id);
+        Object.values(this.forms).map(form => {
+          return form.model.findById(token.id);
         })
       );
-      return data.reduce((a, c, i) => {
-        a[modelKeys[i]] = Boolean(c);
-        return a;
-      }, {});
+      return data.reduce((a, c, i) =>
+        Object.assign(a, { [Object.keys(this.forms)[i]]: Boolean(c) })
+      ,{});
+    }
+
+    async ready(token) {
+      return (await Promise.all(
+        Object.values(this.forms).map(f => f.dependenciesFulfilled(token))
+      )).reduce((a,c,i) => 
+      Object.assign(a, { [Object.keys(this.forms)[i]]: Boolean(c) }),{})
     }
 }
 
+module.exports = new FormHandler()
