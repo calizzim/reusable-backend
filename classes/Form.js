@@ -2,7 +2,6 @@ const typesToValidators = require("../functions/typeToValidators");
 const options = require("../functions/options");
 const _ = require("lodash");
 const getAsyncValidator = require("../functions/asyncValidators");
-const { object } = require("joi");
 
 module.exports = class {
   constructor(name, form, database, fh) {
@@ -34,18 +33,18 @@ module.exports = class {
   //get form data
   async data(token) {
     let native = await this.model.findOne({ _id: token.id });
-    let computed = null
-    if(native && native.computed) {
-      native = native._doc
-      computed = JSON.parse(native.computed)
-      delete native.computed
+    let computed = null;
+    if (native && native.computed) {
+      native = native._doc;
+      computed = JSON.parse(native.computed);
+      delete native.computed;
     }
-    return { computed, native }
+    return { computed, native };
   }
 
   //computed data
   computeData(data, previous) {
-    if(!this.form.computed) return null
+    if (!this.form.computed) return null;
     return this.form.computed.reduce((properties, current) => {
       properties[current.name] = current.compute(data, properties, previous);
       return properties;
@@ -54,107 +53,129 @@ module.exports = class {
 
   //dependents
   async upload(data, token) {
-    let error = await this.validate(data, token)
-    if(error) return error
-    return await this._uploadAndUpdate(data, token)
+    let error = await this.validate(data, token);
+    if (error) return { error };
+    let result = await this._uploadAndUpdate(data, token);
+    return result
   }
 
   async _uploadAndUpdate(data, token) {
-    let dependents = await this._findSortedDependents(token)
-    let dependencies = this._getDependentsDependencies(dependents)
-    let dependenciesData = Promise.all(dependencies.map(d => this.fh.forms[d].data(token)))
-    let dependentsData = Promise.all(dependents.map(d => d == this.name ? null : this.fh.forms[d].data(token)))
-    dependenciesData = await dependenciesData
-    dependentsData = (await dependentsData).map(d => d?d.native:d)
-    let previous = dependencies.reduce((a,c,i) => Object.assign(a, { [c]: dependenciesData[i] }), {})
-    let uploadPromises = []
-    dependents.forEach((c,i) => {
-      let currentForm = this.fh.forms[c]
-      let native = c == this.name ? data : dependentsData[i]
-      let computed = currentForm.computeData(native, previous)
-      previous[c] = { native, computed }
-      uploadPromises.push(currentForm._upload(previous[c], token))
-    })
-    await Promise.all(uploadPromises)
-    return previous[this.name].computed
+    let dependents = await this._findSortedDependents(token);
+    let dependencies = this._getDependentsDependencies(dependents);
+    let dependenciesData = Promise.all(
+      dependencies.map((d) => this.fh.forms[d].data(token))
+    );
+    let dependentsData = Promise.all(
+      dependents.map((d) =>
+        d == this.name ? null : this.fh.forms[d].data(token)
+      )
+    );
+    dependenciesData = await dependenciesData;
+    dependentsData = (await dependentsData).map((d) => (d ? d.native : d));
+    let previous = dependencies.reduce(
+      (a, c, i) => Object.assign(a, { [c]: dependenciesData[i] }),
+      {}
+    );
+    let uploadPromises = [];
+    dependents.forEach((c, i) => {
+      let currentForm = this.fh.forms[c];
+      let native = c == this.name ? data : dependentsData[i];
+      let computed = currentForm.computeData(native, previous);
+      previous[c] = { native, computed };
+      uploadPromises.push(currentForm._upload(previous[c], token));
+    });
+    await Promise.all(uploadPromises);
+    return previous[this.name];
   }
   async _upload(data, token) {
-    let toUpload = data.native || {}
-    toUpload.computed = JSON.stringify(data.computed)
-    if(this.model.schema.obj._id) {
+    let toUpload = _.cloneDeep(data.native || {});
+    toUpload.computed = JSON.stringify(data.computed);
+    if (this.model.schema.obj._id) {
       toUpload._id = token.id;
-      return await this.model.findOneAndUpdate({ _id: token.id }, toUpload, { upsert: true });
-    } 
-    return await (new this.model(toUpload)).save()
+      return await this.model.findOneAndUpdate({ _id: token.id }, toUpload, {
+        upsert: true,
+      });
+    }
+    return await new this.model(toUpload).save();
   }
   async _findSortedDependents(token) {
-    let dependents = this._findDependents()
-    let completed = await this.fh.getCompleted(token)
-    dependents = [...dependents].filter(d => completed[d] || d==this.name)
-    return this._sortDependents(dependents)
+    let dependents = this._findDependents();
+    let completed = await this.fh.getCompleted(token);
+    dependents = [...dependents].filter((d) => completed[d] || d == this.name);
+    return this._sortDependents(dependents);
   }
   _findDependents() {
-    let allDependent = new Set()
-    this._findDependentsR(this.name, allDependent)
-    return allDependent
+    let allDependent = new Set();
+    this._findDependentsR(this.name, allDependent);
+    return allDependent;
   }
   _findDependentsR(current, visited) {
-    current = this.fh.forms[current]
-    if(visited.has(current.name)) return
-    visited.add(current.name)
-    for(let dependent of current.dependents) {
-      this._findDependentsR(dependent, visited)
+    current = this.fh.forms[current];
+    if (visited.has(current.name)) return;
+    visited.add(current.name);
+    for (let dependent of current.dependents) {
+      this._findDependentsR(dependent, visited);
     }
   }
   _sortDependents(dependents) {
-    let sDependents = []
-    let visited = new Set()
-    dependents.forEach(dependent => this._sortDependentsR(dependent, visited, sDependents, new Set(dependents)))
-    return sDependents
+    let sDependents = [];
+    let visited = new Set();
+    dependents.forEach((dependent) =>
+      this._sortDependentsR(
+        dependent,
+        visited,
+        sDependents,
+        new Set(dependents)
+      )
+    );
+    return sDependents;
   }
   _sortDependentsR(current, visited, stack, allDependents) {
-    current = this.fh.forms[current]
-    if(visited.has(current.name)) return
-    visited.add(current.name)
-    if(current.hardDependencies()) current.hardDependencies().forEach(dependency => {
-      if(allDependents.has(current)) this._sortDependentsR(dependency, visited, stack, allDependents)
-    })
-    stack.push(current.name)
+    current = this.fh.forms[current];
+    if (visited.has(current.name)) return;
+    visited.add(current.name);
+    if (current.hardDependencies())
+      current.hardDependencies().forEach((dependency) => {
+        if (allDependents.has(current.name))
+          this._sortDependentsR(dependency, visited, stack, allDependents);
+      });
+    stack.push(current.name);
   }
   _getDependentsDependencies(dependents) {
     let dependencies = dependents.reduce((allDependencies, dependent) => {
-      let dependencies = this.fh.forms[dependent].hardDependencies() || []
-      dependencies.forEach(dependency => allDependencies.add(dependency))
-      return allDependencies
-    }, new Set())
-    return [...dependencies].filter(c => !dependents.includes(c))
+      let dependencies = this.fh.forms[dependent].hardDependencies() || [];
+      dependencies.forEach((dependency) => allDependencies.add(dependency));
+      return allDependencies;
+    }, new Set());
+    return [...dependencies].filter((c) => !dependents.includes(c));
   }
 
   //dependencies
   initDependencies() {
     let dependencies = this.dependencies() || [];
-    for(let dependency of dependencies) {
+    for (let dependency of dependencies) {
       if (!this.fh.formNames().includes(dependency))
         throw new Error(
           `${this.name} has an invalid dependency: ${dependency}`
         );
     }
-    this.dependents = []
-    Object.values(this.fh.forms).forEach(f => {
-      if(f.dependencies() && f.hardDependencies().includes(this.name)) this.dependents.push(f.name)
-    })
+    this.dependents = [];
+    Object.values(this.fh.forms).forEach((f) => {
+      if (f.dependencies() && f.hardDependencies().includes(this.name))
+        this.dependents.push(f.name);
+    });
   }
   dependencies() {
-    if(!this.form.dependencies) return null
+    if (!this.form.dependencies) return null;
     return this.form.dependencies.hard.concat(this.form.dependencies.soft);
   }
   hardDependencies() {
-    if(!this.form.dependencies) return null
-    return this.form.dependencies.hard
+    if (!this.form.dependencies) return null;
+    return this.form.dependencies.hard;
   }
   softDependencies() {
-    if(!this.form.dependencies) return null
-    return this.form.dependencies.soft
+    if (!this.form.dependencies) return null;
+    return this.form.dependencies.soft;
   }
   async dependenciesFulfilled(token) {
     let completed = await this.fh.getCompleted(token);
@@ -165,6 +186,7 @@ module.exports = class {
 
   //validator
   async validate(data, token) {
+    if (data == {}) return null;
     let error = this._validateSync(data);
     if (error) return error;
     error = await this._validateAsync(data, token);
@@ -186,7 +208,7 @@ module.exports = class {
         component.validators = typesToValidators(component.validators, false);
         if (component.asyncValidators) {
           component.asyncValidators = component.asyncValidators.map(
-            validator => getAsyncValidator(validator)
+            (validator) => getAsyncValidator(validator)
           );
         }
         if (typeof component.options == "string")
@@ -197,9 +219,9 @@ module.exports = class {
     return validator;
   }
   _validateSync(data) {
-    for (let key in this._validator || [])
+    for (let key in this._validator || {})
       if (!(key in data)) return "data is missing some keys in the template";
-    if (Object.keys(this._validator).length != Object.keys(data).length)
+    if (Object.keys(this._validator || {}).length != Object.keys(data).length)
       return "data has additional keys not in the template";
     for (let key in this._validator) {
       data[key] = this._validator[key].dType(data[key]);
@@ -233,18 +255,18 @@ module.exports = class {
 
   async validateField(field, value, token) {
     let asyncValidators = this._validator[field].asyncValidators;
-    let errors = await Promise.all(asyncValidators.map((validator) =>
-      validator(this, field, value, token)
-    ));
-    for(let error of errors) {
-      if(error) return error
+    let errors = await Promise.all(
+      asyncValidators.map((validator) => validator(this, field, value, token))
+    );
+    for (let error of errors) {
+      if (error) return error;
     }
-    return null
+    return null;
   }
 
   //template
   hasTemplate() {
-    return Boolean(this.template)
+    return Boolean(this.template);
   }
   _initTemplate() {
     this.template = null;

@@ -21,7 +21,8 @@ route.get("/:formName", formNameValid, async (req, res) => {
 //upload a form, return error if invalid otherwise null
 route.post("/:formName", formNameValid, async (req, res) => {
   let data = await req.form.upload(req.body, req.token)
-  if(typeof(data)=="string") return res.status(400).send({ error: data })
+  let error = data.error
+  if(error) return res.status(400).send({ error })
   res.status(200).send({ data })
 });
 

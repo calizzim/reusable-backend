@@ -16,23 +16,15 @@ route.get('/signup', (req,res) => {
 })
 
 route.get('/login', (req,res) => {
-  let data = { template: fh.forms.user.template, data: null }
+  let data = { template: fh.forms.login.template, data: null }
   return res.status(200).send({ data })
 })
 
 //a new user is created
 route.post("/signup", async (req, res) => {
-  let userForm = fh.forms.user
-  const newUser = req.body;
-
-  const error = await userForm.validate(newUser, null);
-  if (error) return res.status(400).send({ error });
-
-  const salt = await bcrypt.genSalt();
-  newUser.password = await bcrypt.hash(newUser.password, salt);
-
-  await userForm.upload(newUser, null)
-  res.status(200).send({ data: "new user created" });
+  let error = await fh.newUser(req.body)
+  if(error) return res.status(400).send({ error })
+  res.status(200).send({ data: null })
 });
 
 //login attempt

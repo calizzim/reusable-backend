@@ -40,6 +40,16 @@ class FormHandler {
       return await Promise.all(allComputedData)
     }
 
+    async newUser(data) {
+      let userForm = this.forms.user
+      const error = await userForm.validate(data, null);
+      if(error) return error
+      const salt = await bcrypt.genSalt();
+      data.password = await bcrypt.hash(data.password, salt);
+      let newUser = userForm.model(data)
+      await newUser.save()
+    }
+
     async authenticateLogin(data) {
       const model = this.forms.user.model;
       let user = await model.findOne({ email: data.email });
