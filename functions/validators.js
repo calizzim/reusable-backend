@@ -12,7 +12,7 @@ module.exports = {
         message: 'this can only contain letters'
     },
     currency: {
-        expression: /^\d+(\.\d{2})?$/,
+        expression: /^\d+(\.\d{0,2})?$/,
         message: 'this must be a dollar amount'
     },
     integer: {
